@@ -1,4 +1,5 @@
 use clap::Parser;
+use glob::glob;
 use image::{Rgba, RgbaImage};
 use rayon::prelude::*;
 use std::path::PathBuf;
@@ -10,9 +11,9 @@ struct Args {
     #[arg(short, long)]
     background: PathBuf,
 
-    /// Paths to one or more overlay images
-    #[arg(short, long, required = true)]
-    overlays: Vec<PathBuf>,
+    /// Paths or glob patterns for one or more overlay images
+    #[arg(short, long, required = true, num_args = 1.., value_delimiter = ' ')]
+    overlays: Vec<String>,
 
     /// Treat white as transparent
     #[arg(short, long)]
@@ -33,11 +34,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let background = image::open(&args.background)?.to_rgba8();
 
-    for overlay_path in args.overlays {
+    let overlay_paths = expand_glob_patterns(&args.overlays)?;
+
+    for overlay_path in overlay_paths {
         process_overlay(&background, &overlay_path, args.white_transparent)?;
     }
 
     Ok(())
+}
+
+fn expand_glob_patterns(patterns: &[String]) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+    let mut expanded_paths = Vec::new();
+
+    for pattern in patterns {
+        if pattern.contains('*') || pattern.contains('?') {
+            for entry in glob(pattern)? {
+                expanded_paths.push(entry?);
+            }
+        } else {
+            expanded_paths.push(PathBuf::from(pattern));
+        }
+    }
+
+    Ok(expanded_paths)
 }
 
 fn process_overlay(
@@ -48,10 +67,7 @@ fn process_overlay(
     let overlay = image::open(overlay_path)?.to_rgba8();
     let results = find_best_matches(background, &overlay, treat_white_as_transparent);
 
-    println!(
-        "\nOverlay: {}",
-        overlay_path.file_name().unwrap().to_str().unwrap()
-    );
+    println!("\nOverlay: {}", overlay_path.display());
     print_report(&results);
 
     Ok(())

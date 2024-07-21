@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Image Overlay Web App</title>
+	<style>
+		body {
+			font-family: Arial, sans-serif;
+			max-width: 800px;
+			margin: 0 auto;
+			padding: 20px;
+		}
+
+		#imageContainer {
+			position: relative;
+			margin-bottom: 20px;
+		}
+
+		#backgroundImage,
+		.overlayImage {
+			max-width: 100%;
+		}
+
+		.overlayImage {
+			position: absolute;
+		}
+
+		#imageList {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 10px;
+		}
+
+		.imageItem {
+			border: 1px solid #ccc;
+			padding: 10px;
+			width: calc(50% - 5px);
+			box-sizing: border-box;
+		}
+
+		.imageItem img {
+			max-width: 100%;
+			height: auto;
+		}
+
+		.controls {
+			margin-top: 10px;
+		}
+
+		.controls label {
+			margin-right: 10px;
+		}
+
+		.switch {
+			position: relative;
+			display: inline-block;
+			width: 60px;
+			height: 34px;
+		}
+
+		.switch input {
+			opacity: 0;
+			width: 0;
+			height: 0;
+		}
+
+		.slider {
+			position: absolute;
+			cursor: pointer;
+			top: 0;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			background-color: #ccc;
+			transition: .4s;
+			border-radius: 34px;
+		}
+
+		.slider:before {
+			position: absolute;
+			content: "";
+			height: 26px;
+			width: 26px;
+			left: 4px;
+			bottom: 4px;
+			background-color: white;
+			transition: .4s;
+			border-radius: 50%;
+		}
+
+		input:checked+.slider {
+			background-color: #2196F3;
+		}
+
+		input:checked+.slider:before {
+			transform: translateX(26px);
+		}
+	</style>
+</head>
+
+<body>
+	<h1>Image Overlay Web App</h1>
+
+	<div>
+		<h2>Background Image</h2>
+		<input type="file" id="backgroundInput" accept="image/*">
+	</div>
+
+	<div>
+		<h2>Overlay Images</h2>
+		<input type="file" id="overlayInput" accept="image/*" multiple>
+	</div>
+
+	<div id="imageContainer">
+		<img id="backgroundImage" alt="Background Image">
+	</div>
+
+	<div id="imageList"></div>
+
+	<script>
+		const backgroundInput = document.getElementById('backgroundInput');
+		const overlayInput = document.getElementById('overlayInput');
+		const imageContainer = document.getElementById('imageContainer');
+		const backgroundImage = document.getElementById('backgroundImage');
+		const imageList = document.getElementById('imageList');
+
+		let overlayImages = [];
+
+		backgroundInput.addEventListener('change', (e) => {
+			const file = e.target.files[0];
+			if (file) {
+				const reader = new FileReader();
+				reader.onload = (e) => {
+					backgroundImage.src = e.target.result;
+				};
+				reader.readAsDataURL(file);
+			}
+		});
+
+		overlayInput.addEventListener('change', (e) => {
+			const files = e.target.files;
+			for (let file of files) {
+				const reader = new FileReader();
+				reader.onload = (e) => {
+					addOverlayImage(e.target.result);
+				};
+				reader.readAsDataURL(file);
+			}
+		});
+
+		function addOverlayImage(src) {
+			const id = `overlay-${overlayImages.length}`;
+			overlayImages.push({id, src, x: 0, y: 0, transparent: false, visible: true});
+			updateImageList();
+			updateOverlayPositions();
+		}
+
+		function updateImageList() {
+			imageList.innerHTML = '';
+			overlayImages.forEach((img, index) => {
+				const item = document.createElement('div');
+				item.className = 'imageItem';
+				item.innerHTML = `
+                    <img src="${img.src}" alt="Overlay ${index + 1}">
+                    <div class="controls">
+                        <label>
+                            X: <input type="number" value="${img.x}" onchange="updatePosition(${index}, 'x', this.value)">
+                        </label>
+                        <label>
+                            Y: <input type="number" value="${img.y}" onchange="updatePosition(${index}, 'y', this.value)">
+                        </label>
+                        <label>
+                            <input type="checkbox" ${img.transparent ? 'checked' : ''} onchange="toggleTransparency(${index}, this.checked)">
+                            Transparent
+                        </label>
+                        <label class="switch">
+                            <input type="checkbox" ${img.visible ? 'checked' : ''} onchange="toggleVisibility(${index}, this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                        Visible
+                    </div>
+                `;
+				imageList.appendChild(item);
+			});
+		}
+
+		function updatePosition(index, axis, value) {
+			overlayImages[index][axis] = parseInt(value);
+			updateOverlayPositions();
+		}
+
+		function toggleTransparency(index, isTransparent) {
+			overlayImages[index].transparent = isTransparent;
+			updateOverlayPositions();
+		}
+
+		function toggleVisibility(index, isVisible) {
+			overlayImages[index].visible = isVisible;
+			updateOverlayPositions();
+		}
+
+		function updateOverlayPositions() {
+			imageContainer.querySelectorAll('.overlayImage').forEach(img => img.remove());
+			overlayImages.forEach(img => {
+				if (!img.visible) return;
+
+				const canvas = document.createElement('canvas');
+				const ctx = canvas.getContext('2d');
+				const imageObj = new Image();
+				imageObj.onload = function () {
+					canvas.width = imageObj.width;
+					canvas.height = imageObj.height;
+					ctx.drawImage(imageObj, 0, 0, imageObj.width, imageObj.height);
+
+					if (img.transparent) {
+						const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+						const data = imageData.data;
+						for (let i = 0; i < data.length; i += 4) {
+							if (data[i] === 255 && data[i + 1] === 255 && data[i + 2] === 255) {
+								data[i + 3] = 0; // Set alpha to 0 for white pixels
+							}
+						}
+						ctx.putImageData(imageData, 0, 0);
+					}
+
+					const overlayImg = document.createElement('img');
+					overlayImg.src = canvas.toDataURL();
+					overlayImg.className = 'overlayImage';
+					overlayImg.style.left = `${img.x}px`;
+					overlayImg.style.top = `${img.y}px`;
+					imageContainer.appendChild(overlayImg);
+				};
+				imageObj.src = img.src;
+			});
+		}
+	</script>
+</body>
+
+</html>

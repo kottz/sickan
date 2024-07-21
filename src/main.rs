@@ -1,6 +1,7 @@
 use image::{Rgba, RgbaImage};
 use rayon::prelude::*;
 
+#[derive(Clone)]
 struct MatchResult {
     x: u32,
     y: u32,
@@ -11,7 +12,7 @@ struct MatchResult {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let background_path = "output/stockholm/Internal/B AFB-305.bmp";
-    let overlay_path = "output/stockholm/Internal/anusensbakgträd-313.bmp";
+    let overlay_path = "output/stockholm/Internal/AnusenBackDörr1-307.bmp";
     let treat_white_as_transparent = true;
 
     let background = image::open(background_path)?.to_rgba8();
@@ -36,7 +37,7 @@ fn find_best_matches(
         .flat_map(|x| (0..=bg_height - ov_height).map(move |y| (x, y)))
         .collect();
 
-    let results: Vec<MatchResult> = positions
+    let mut results: Vec<MatchResult> = positions
         .par_iter()
         .map(|&(x, y)| {
             let match_score =
@@ -55,10 +56,18 @@ fn find_best_matches(
         })
         .collect();
 
-    results
-        .into_iter()
-        .filter(|r| r.match_score > 0.5)
-        .collect()
+    // Sort results by match_score in descending order
+    results.sort_by(|a, b| b.match_score.partial_cmp(&a.match_score).unwrap());
+
+    // Return all results, or at least the best match if there are no good matches
+    if results.is_empty() || results[0].match_score <= 0.5 {
+        vec![results[0].clone()]
+    } else {
+        results
+            .into_iter()
+            .filter(|r| r.match_score > 0.5)
+            .collect()
+    }
 }
 
 fn calculate_match_score(
@@ -134,7 +143,8 @@ fn check_border_match(
 }
 
 fn pixels_match(bg_pixel: Rgba<u8>, ov_pixel: Rgba<u8>, treat_white_as_transparent: bool) -> bool {
-    if treat_white_as_transparent && ov_pixel[0] == 0 && ov_pixel[1] == 0 && ov_pixel[2] == 0 {
+    if treat_white_as_transparent && ov_pixel[0] == 255 && ov_pixel[1] == 255 && ov_pixel[2] == 255
+    {
         true
     } else {
         bg_pixel == ov_pixel
@@ -143,10 +153,15 @@ fn pixels_match(bg_pixel: Rgba<u8>, ov_pixel: Rgba<u8>, treat_white_as_transpare
 
 fn print_report(results: &[MatchResult]) {
     println!("Match Report:");
-    for result in results.iter().take(10) {
+    for (index, result) in results.iter().enumerate() {
         println!(
-            "Position: ({}, {}), Score: {:.2}, Perfect: {}, Border Match: {}",
-            result.x, result.y, result.match_score, result.is_perfect, result.is_border_match
+            "Match {}: Position: ({}, {}), Score: {:.2}, Perfect: {}, Border Match: {}",
+            index + 1,
+            result.x,
+            result.y,
+            result.match_score,
+            result.is_perfect,
+            result.is_border_match
         );
     }
 }

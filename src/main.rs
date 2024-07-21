@@ -1,7 +1,8 @@
 use clap::Parser;
 use glob::glob;
-use image::{Rgba, RgbaImage};
+use image::{GenericImageView, Rgba, RgbaImage};
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
@@ -18,9 +19,13 @@ struct Args {
     /// Treat white as transparent
     #[arg(short, long)]
     white_transparent: bool,
+
+    /// Output format (text or json)
+    #[arg(long = "print-format", value_name = "FORMAT", default_value = "text")]
+    print_format: String,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 struct MatchResult {
     x: u32,
     y: u32,
@@ -29,15 +34,54 @@ struct MatchResult {
     is_border_match: bool,
 }
 
+#[derive(Serialize, Deserialize)]
+struct ImageInfo {
+    filename: String,
+    width: u32,
+    height: u32,
+}
+
+#[derive(Serialize, Deserialize)]
+struct OverlayResult {
+    image_info: ImageInfo,
+    matches: Vec<MatchResult>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct JsonOutput {
+    ekman_version: String,
+    background: ImageInfo,
+    overlays: Vec<OverlayResult>,
+    white_transparent: bool,
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
+    let print_json = args.print_format == "json";
 
     let background = image::open(&args.background)?.to_rgba8();
+    let bg_dimensions = background.dimensions();
 
     let overlay_paths = expand_glob_patterns(&args.overlays)?;
+    let mut all_results = Vec::new();
 
     for overlay_path in overlay_paths {
-        process_overlay(&background, &overlay_path, args.white_transparent)?;
+        let results = process_overlay(&background, &overlay_path, args.white_transparent)?;
+        if !print_json {
+            println!("\nOverlay: {}", overlay_path.display());
+            print_report(&results);
+        }
+        all_results.push((overlay_path, results));
+    }
+
+    if print_json {
+        let json_output = generate_json_output(
+            &args.background,
+            &all_results,
+            args.white_transparent,
+            bg_dimensions,
+        );
+        println!("{}", serde_json::to_string_pretty(&json_output)?);
     }
 
     Ok(())
@@ -63,14 +107,10 @@ fn process_overlay(
     background: &RgbaImage,
     overlay_path: &PathBuf,
     treat_white_as_transparent: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<Vec<MatchResult>, Box<dyn std::error::Error>> {
     let overlay = image::open(overlay_path)?.to_rgba8();
     let results = find_best_matches(background, &overlay, treat_white_as_transparent);
-
-    println!("\nOverlay: {}", overlay_path.display());
-    print_report(&results);
-
-    Ok(())
+    Ok(results)
 }
 
 fn find_best_matches(
@@ -209,5 +249,46 @@ fn print_report(results: &[MatchResult]) {
             result.is_perfect,
             result.is_border_match
         );
+    }
+}
+
+fn generate_json_output(
+    background: &PathBuf,
+    all_results: &[(PathBuf, Vec<MatchResult>)],
+    white_transparent: bool,
+    bg_dimensions: (u32, u32),
+) -> JsonOutput {
+    let background_info = ImageInfo {
+        filename: background
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string(),
+        width: bg_dimensions.0,
+        height: bg_dimensions.1,
+    };
+
+    let overlays = all_results
+        .iter()
+        .map(|(path, results)| {
+            let overlay = image::open(path).unwrap();
+            let dimensions = overlay.dimensions();
+            OverlayResult {
+                image_info: ImageInfo {
+                    filename: path.file_name().unwrap().to_str().unwrap().to_string(),
+                    width: dimensions.0,
+                    height: dimensions.1,
+                },
+                matches: results.clone(),
+            }
+        })
+        .collect();
+
+    JsonOutput {
+        ekman_version: env!("CARGO_PKG_VERSION").to_string(),
+        background: background_info,
+        overlays,
+        white_transparent,
     }
 }

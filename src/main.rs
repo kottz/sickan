@@ -1,5 +1,23 @@
+use clap::Parser;
 use image::{Rgba, RgbaImage};
 use rayon::prelude::*;
+use std::path::PathBuf;
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Path to the background image
+    #[arg(short, long)]
+    background: PathBuf,
+
+    /// Paths to one or more overlay images
+    #[arg(short, long, required = true)]
+    overlays: Vec<PathBuf>,
+
+    /// Treat white as transparent
+    #[arg(short, long)]
+    white_transparent: bool,
+}
 
 #[derive(Clone)]
 struct MatchResult {
@@ -11,15 +29,29 @@ struct MatchResult {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let background_path = "output/stockholm/Internal/B AFB-305.bmp";
-    let overlay_path = "output/stockholm/Internal/AnusenBackDörr1-307.bmp";
-    let treat_white_as_transparent = true;
+    let args = Args::parse();
 
-    let background = image::open(background_path)?.to_rgba8();
+    let background = image::open(&args.background)?.to_rgba8();
+
+    for overlay_path in args.overlays {
+        process_overlay(&background, &overlay_path, args.white_transparent)?;
+    }
+
+    Ok(())
+}
+
+fn process_overlay(
+    background: &RgbaImage,
+    overlay_path: &PathBuf,
+    treat_white_as_transparent: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let overlay = image::open(overlay_path)?.to_rgba8();
+    let results = find_best_matches(background, &overlay, treat_white_as_transparent);
 
-    let results = find_best_matches(&background, &overlay, treat_white_as_transparent);
-
+    println!(
+        "\nOverlay: {}",
+        overlay_path.file_name().unwrap().to_str().unwrap()
+    );
     print_report(&results);
 
     Ok(())
@@ -56,10 +88,8 @@ fn find_best_matches(
         })
         .collect();
 
-    // Sort results by match_score in descending order
     results.sort_by(|a, b| b.match_score.partial_cmp(&a.match_score).unwrap());
 
-    // Return all results, or at least the best match if there are no good matches
     if results.is_empty() || results[0].match_score <= 0.5 {
         vec![results[0].clone()]
     } else {

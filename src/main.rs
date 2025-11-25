@@ -3,7 +3,7 @@ use glob::glob;
 use image::{GenericImageView, Rgba, RgbaImage};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -253,7 +253,7 @@ fn print_report(results: &[MatchResult]) {
 }
 
 fn generate_json_output(
-    background: &PathBuf,
+    background: &Path,
     all_results: &[(PathBuf, Vec<MatchResult>)],
     white_transparent: bool,
     bg_dimensions: (u32, u32),

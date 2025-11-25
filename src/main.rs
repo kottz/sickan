@@ -49,7 +49,7 @@ struct OverlayResult {
 
 #[derive(Serialize, Deserialize)]
 struct JsonOutput {
-    ekman_version: String,
+    sickan_version: String,
     background: ImageInfo,
     overlays: Vec<OverlayResult>,
     white_transparent: bool,
@@ -286,7 +286,7 @@ fn generate_json_output(
         .collect();
 
     JsonOutput {
-        ekman_version: env!("CARGO_PKG_VERSION").to_string(),
+        sickan_version: env!("CARGO_PKG_VERSION").to_string(),
         background: background_info,
         overlays,
         white_transparent,

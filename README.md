@@ -1,6 +1,6 @@
-# Ekman
+# Sickan
 
-Ekman finds the best match positions of overlay images on a background image. It's useful for tasks like identifying UI elements in screenshots or locating specific patterns in larger images.
+sickan finds the best match positions of overlay images on a background image. It's useful for tasks like identifying UI elements in screenshots or locating specific patterns in larger images.
 
 It was created to find the position of texture assets in [OpenJonsson](https://github.com/kottz/OpenJonsson).
 
@@ -9,8 +9,8 @@ It was created to find the position of texture assets in [OpenJonsson](https://g
 Ensure you have Rust installed, then:
 
 ```
-git clone https://github.com/kottz/ekman.git
-cd ekman
+git clone https://github.com/kottz/sickan.git
+cd sickan
 cargo run --release -- --background <BACKGROUND_IMAGE> --overlays <OVERLAY_IMAGES> [OPTIONS]
 ```
 
